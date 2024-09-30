@@ -76,7 +76,7 @@ public class PackageGUIMojo extends AbstractMojo {
 	@Parameter(name = "recursive", defaultValue = "false")
 	private boolean recursive;
 	
-	@Parameter(name = "minimum", defaultValue = "true")
+	@Parameter(name = "minimum", defaultValue = "false")
 	private boolean minimum;
 
 	@Parameter(property = "jar", alias = "jar")

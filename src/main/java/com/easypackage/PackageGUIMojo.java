@@ -6,21 +6,29 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
+import org.apache.maven.plugin.BuildPluginManager;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
+import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.project.MavenProject;
+import org.codehaus.plexus.util.xml.Xpp3Dom;
+
+import com.easypackage.executor.MojoExecutor;
+import com.easypackage.executor.MojoExecutor.Element;
 
 /**
  * 
  */
-@Mojo(name = "jpackage", defaultPhase = LifecyclePhase.PACKAGE)
+@Mojo(name = "jpackage", requiresDependencyResolution = ResolutionScope.RUNTIME, defaultPhase = LifecyclePhase.PACKAGE)
 public class PackageGUIMojo extends AbstractMojo {
 
 	@Parameter(name = "name", defaultValue = "demo")
@@ -64,7 +72,24 @@ public class PackageGUIMojo extends AbstractMojo {
 	
 	@Parameter(name = "description", defaultValue = "")
 	private String description;
+	
+	@Parameter(name = "recursive", defaultValue = "false")
+	private boolean recursive;
+	
+	@Parameter(name = "minimum", defaultValue = "true")
+	private boolean minimum;
 
+	@Parameter(property = "jar", alias = "jar")
+	private JarConfiguration jarConfiguration = new JarConfiguration();
+	
+	@Component
+	private MavenProject mavenProject;
+
+	@Component
+	private MavenSession mavenSession;
+
+	@Component
+	private BuildPluginManager pluginManager;
 	
 	/**
 	 * 
@@ -75,7 +100,7 @@ public class PackageGUIMojo extends AbstractMojo {
 		
 		try {
 
-			getLog().info("Start Package");
+			getLog().info("Start Package Gui");
 			
 			List<String> params = new ArrayList<>();
 
@@ -104,15 +129,17 @@ public class PackageGUIMojo extends AbstractMojo {
 			params.add("--input");
 			params.add(libs);
 			
-			params.add("--add-modules");
-			String modules = getModules();
-			
-			getLog().info("Used modules: " + modules);
-			if ("".equals(modules)) {
-				throw new MojoExecutionException("parse modules failed");
+			//minimum package, gen minimum runtime image
+			if (minimum) {
+				params.add("--add-modules");
+				String modules = getModules();
+				
+				getLog().info("Used modules: " + modules);
+				if ("".equals(modules)) {
+					throw new MojoExecutionException("parse modules failed");
+				}
+				params.add(modules);
 			}
-			params.add(modules);
-			
 			
 			if (winConsole) {
 				params.add("--win-console");
@@ -274,7 +301,10 @@ public class PackageGUIMojo extends AbstractMojo {
 	 * @throws MojoExecutionException 
 	 */
 	protected final String getModules() throws MojoExecutionException {
+//		module
 //		jdeps --multi-release 9 --print-module-deps --ignore-missing-deps --module-path ./* modules/*
+		
+//		jdeps --multi-release 9 -cp libs/* --print-module-deps -q --ignore-missing-deps libs/AI-Service-0.0.1-SNAPSHOT.jar
 		
 		String absJdeps = getAbsJdeps();
 		
@@ -282,11 +312,17 @@ public class PackageGUIMojo extends AbstractMojo {
 		list.add(absJdeps);
 		list.add("--multi-release");
 		list.add("9");
-		list.add("--print-module-deps");
-		list.add("--ignore-missing-deps");
-		list.add("--module-path");
-		list.add("./*");
+		list.add("-cp");
 		list.add(libs + "/*");
+		list.add("--print-module-deps");
+		list.add("-q");
+		if (recursive) {
+			list.add("--recursive");
+		}
+		list.add("--ignore-missing-deps");
+//		list.add("--module-path");
+//		list.add("./*");
+		list.add(libs + "/" + mavenProject.getBuild().getFinalName()+".jar");
 
 		ProcessBuilder processBuilder = new ProcessBuilder(list);
 		processBuilder.directory(workDirectory);
@@ -314,9 +350,56 @@ public class PackageGUIMojo extends AbstractMojo {
 		
 		return modules;
 	}
+	
+	
+	/**
+	 * 
+	 * @throws MojoExecutionException
+	 */
+	private void jar() throws MojoExecutionException {
+
+		Element manifest = MojoExecutor.element(MojoExecutor.name("manifest"),
+				MojoExecutor.element("addClasspath", "true"),
+				MojoExecutor.element("mainClass", this.mainClass));
+
+		Xpp3Dom configuration = MojoExecutor.configuration(MojoExecutor
+				.element(MojoExecutor.name("outputDirectory"), "${project.build.directory}/libs"),
+				MojoExecutor.element(MojoExecutor.name("archive"), manifest));
+
+		this.jarConfiguration.configure(configuration);
+
+		MojoExecutor.executeMojo(MojoExecutor.plugin(
+				MojoExecutor.groupId("org.apache.maven.plugins"),
+				MojoExecutor.artifactId("maven-jar-plugin"),
+				MojoExecutor.version("2.5")), MojoExecutor.goal("jar"),
+				configuration, MojoExecutor.executionEnvironment(mavenProject,
+						mavenSession, pluginManager));
+		
+		getLog().info("maven-jar-plugin package success");
+	}
+	
+	private void dependencies() throws MojoExecutionException {
+
+		MojoExecutor.executeMojo(MojoExecutor.plugin(
+				MojoExecutor.groupId("org.apache.maven.plugins"),
+				MojoExecutor.artifactId("maven-dependency-plugin"),
+				MojoExecutor.version("2.10")), MojoExecutor
+				.goal("copy-dependencies"), MojoExecutor
+				.configuration(MojoExecutor.element(
+						MojoExecutor.name("outputDirectory"), "${project.build.directory}/libs")),
+				MojoExecutor.executionEnvironment(mavenProject, mavenSession,
+						pluginManager));
+		
+		getLog().info("maven-dependency-plugin package success");
+	}
 
 	@Override
 	public void execute() throws MojoExecutionException, MojoFailureException {
+		
+		jar();
+		
+		dependencies();
+		
 		run();
 	}
 

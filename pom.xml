@@ -6,7 +6,7 @@
 
 	<groupId>io.github.janix520</groupId>
 	<artifactId>maven-easypackage-plugin</artifactId>
-	<version>1.0.0</version>
+	<version>1.1.0</version>
 	<name>EasyPackage</name>
 	<packaging>maven-plugin</packaging>
 
@@ -80,6 +80,35 @@
 			<scope>provided</scope>
 		</dependency>
 
+
+		<!-- https://mvnrepository.com/artifact/org.twdata.maven/mojo-executor -->
+<!--		<dependency>
+			<groupId>org.twdata.maven</groupId>
+			<artifactId>mojo-executor</artifactId>
+			<version>2.4.0</version>
+		</dependency>-->
+		<dependency>
+			<groupId>org.apache.maven</groupId>
+			<artifactId>maven-core</artifactId>
+			<version>3.8.5</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.maven</groupId>
+			<artifactId>maven-model</artifactId>
+			<version>3.8.5</version>
+			<scope>provided</scope>
+		</dependency>
+		
+		<!-- https://mvnrepository.com/artifact/org.codehaus.plexus/plexus-utils -->
+		<dependency>
+		    <groupId>org.codehaus.plexus</groupId>
+		    <artifactId>plexus-utils</artifactId>
+		    <version>3.1.1</version>
+		    <scope>compile</scope>
+		</dependency>
+
+
 	</dependencies>
 
 	<build>
@@ -93,7 +122,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-plugin-plugin</artifactId>
-				<version>3.6.1</version>
+				<version>3.15.0</version>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

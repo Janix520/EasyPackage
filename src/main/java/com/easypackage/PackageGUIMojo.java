@@ -265,6 +265,7 @@ public class PackageGUIMojo extends AbstractMojo {
 			if (winDirChooser) {
 				params.add("--win-dir-chooser");
 			}
+			
 			if (winMenu) {
 				params.add("--win-menu");
 			}
@@ -325,7 +326,6 @@ public class PackageGUIMojo extends AbstractMojo {
 				params.add("--linux-shortcut");
 			}
 
-			
 			if (null != macPackageIdentifier && !"".equals(macPackageIdentifier)) {
 				params.add("--mac-package-identifier");
 				params.add(macPackageIdentifier);

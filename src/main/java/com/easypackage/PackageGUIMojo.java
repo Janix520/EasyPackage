@@ -26,6 +26,29 @@ import com.easypackage.executor.MojoExecutor;
 import com.easypackage.executor.MojoExecutor.Element;
 
 /**
+ * https://docs.oracle.com/en/java/javase/21/docs/specs/man/jpackage.html
+ * 
+ * 打包 windows msi 需要 wix3.11   https://wixtoolset.org
+ * 
+ * #生成适合宿主系统的应用包：
+	#对于模块化应用：
+	    jpackage -n name -p modulePath -m moduleName/className
+	#对于非模块化应用程序：
+	    jpackage -i inputDir -n name  --main-class className --main-jar myJar.jar
+	#从预先构建的应用程序映像：
+	    jpackage -n name --app-image appImageDir
+	
+	#生成应用镜像：
+	#对于模块化应用：
+	    jpackage --type app-image -n name -p modulePath -m moduleName/className
+	#对于非模块化应用程序：
+	    jpackage --type app-image -i inputDir -n name --main-class className --main-jar myJar.jar
+	#要为 jlink 提供您自己的选项，请单独运行 jlink：
+	    jlink --output appRuntimeImage -p modulePath -m moduleName --no-header-files [<additional jlink options>...]
+	    jpackage --type app-image -n name -m moduleName/className --runtime-image appRuntimeImage
+	
+	#生成 Java 运行时包：
+	jpackage -n name --runtime-image <runtime-image>
  * 
  */
 @Mojo(name = "jpackage", requiresDependencyResolution = ResolutionScope.RUNTIME, defaultPhase = LifecyclePhase.PACKAGE)
@@ -35,49 +58,141 @@ public class PackageGUIMojo extends AbstractMojo {
 	private String name;
 	
 	@Parameter(name = "type", defaultValue = "app-image")
-	private String type;
+	private String type; //打包类型 "app-image"， "exe"， "msi"， "rpm"， "deb"， "pkg"， "dmg"， app-image可以理解为绿色版exe
 	
 	@Parameter(name = "jarName", defaultValue = "${project.build.finalName}")
-	private String jarName;
+	private String jarName; //生成主jar包的名称
 	
 	@Parameter(name = "mainClass", defaultValue = "")
-	private String mainClass;
+	private String mainClass; //main方法
 	
 	@Parameter(name = "libs", defaultValue = "libs", required = true)
-	private String libs;
+	private String libs; //生成所有依赖的临时目录
+	
+	@Parameter(name = "javaHome", defaultValue = "")
+	private String javaHome; //指定java home
 	
 //	@Parameter(defaultValue = "${project.artifactId}")
 //	private String module;
-
+	
 	@Parameter(name = "workDirectory", defaultValue = "${project.build.directory}")
 	private File workDirectory;
-	
-	@Parameter(name = "winConsole", defaultValue = "false")
-	private boolean winConsole;
+
+	/**
+	 * Add custom files or directory resources to the current directory of the app
+	 */
+	@Parameter(name = "appContent", defaultValue = "")
+	private String appContent; //自定义资源的目录，英文逗号分隔，此方法只对jdk>17的有效
 	
 	@Parameter(name = "icon", defaultValue = "")
-	private String icon;
+	private String icon; //程序图标
 	
 	@Parameter(name = "javaOptions", defaultValue = "")
-	private String javaOptions;
+	private String javaOptions; //jvm参数
+	
+//	@Parameter(name = "arguments", defaultValue = "")
+//	private String arguments; //传递给主类的命令行参数
 	
 	@Parameter(name = "appVersion", defaultValue = "1.0.0")
-	private String appVersion;
+	private String appVersion; //版本 1.0.0
 	
 	@Parameter(name = "copyright", defaultValue = "")
-	private String copyright;
+	private String copyright; //版权
 	
 	@Parameter(name = "vendor", defaultValue = "")
-	private String vendor;
+	private String vendor; //程序厂商
 	
 	@Parameter(name = "description", defaultValue = "")
-	private String description;
+	private String description; //程序描述
+	
+	@Parameter(name = "installDir", defaultValue = "")
+	private String installDir; //安装程序目录的名称
 	
 	@Parameter(name = "recursive", defaultValue = "false")
-	private boolean recursive;
+	private boolean recursive; //递归检查依赖，但是会很慢，建议使用minimum的时候如果打包运行有问题，可以尝试打开
 	
 	@Parameter(name = "minimum", defaultValue = "false")
-	private boolean minimum;
+	private boolean minimum; //最小打包
+	
+	
+	/**
+	 * Windows available
+	 */
+	@Parameter(name = "winConsole", defaultValue = "false")
+	private boolean winConsole; //运行的时候打开控制台
+	
+	@Parameter(name = "winDirChooser", defaultValue = "true")
+	private boolean winDirChooser; //安装包支持选择目录
+	
+	@Parameter(name = "winMenu", defaultValue = "false")
+	private boolean winMenu; //安装包支持开始菜单
+	
+	@Parameter(name = "winShortcut", defaultValue = "true")
+	private boolean winShortcut; //安装包桌面快捷方式
+	
+	@Parameter(name = "winShortcutPrompt", defaultValue = "true")
+	private boolean winShortcutPrompt; //安装包桌面快捷方式可以用户自由取消
+	
+	@Parameter(name = "winPerUserInstall", defaultValue = "true")
+	private boolean winPerUserInstall; //给user安装，否则是给public用户安装，快捷方式也会创建到public的desktop
+	
+	@Parameter(name = "winHelpUrl", defaultValue = "")
+	private String winHelpUrl; 
+	
+	@Parameter(name = "winUpdateUrl", defaultValue = "")
+	private String winUpdateUrl;
+	
+	/**
+	 * Linux available
+	 */
+	@Parameter(name = "linuxPackageName", defaultValue = "")
+	private String linuxPackageName; //包的名称，默认为应用程序名称
+	
+	@Parameter(name = "linuxDebMaintainer", defaultValue = "")
+	private String linuxDebMaintainer; //捆绑包.deb维护者
+	
+	@Parameter(name = "linuxMenuGroup", defaultValue = "")
+	private String linuxMenuGroup; //此应用程序所在的菜单组
+	
+	@Parameter(name = "linuxPackageDeps", defaultValue = "false")
+	private boolean linuxPackageDeps; //应用程序所需的包或功能
+	
+	@Parameter(name = "linuxRpmLicenseType", defaultValue = "")
+	private String linuxRpmLicenseType; //许可证类型（RPM .spec 的"许可证：<值>"）
+	
+	@Parameter(name = "linuxAppRelease", defaultValue = "")
+	private String linuxAppRelease; //RPM 的发布值<name>.spec 文件或 DEB 控制文件的 Debian 修订版值
+	
+	@Parameter(name = "linuxAppCategory", defaultValue = "")
+	private String linuxAppCategory; //RPM <name>.spec 文件或 DEB 控制文件的节值的组值
+	
+	@Parameter(name = "linuxShortcut", defaultValue = "true")
+	private boolean linuxShortcut; //为应用程序创建快捷方式
+//	
+	/**
+	 * Mac available
+	 */
+	@Parameter(name = "macPackageIdentifier", defaultValue = "")
+	private String macPackageIdentifier; //唯一标识适用于 macOSX 的应用程序的标识符
+	
+	@Parameter(name = "macPackageName", defaultValue = "")
+	private String macPackageName; //应用程序在菜单栏中显示的名称
+	
+	@Parameter(name = "macBundleSigningPrefix", defaultValue = "")
+	private String macBundleSigningPrefix; //对应用程序捆绑包进行签名时，此值将作为所有需要签名且没有现有捆绑包标识符的组件的前缀
+	
+	@Parameter(name = "macSign", defaultValue = "")
+	private String macSign; //请求对捆绑包进行签名
+	
+	@Parameter(name = "macSigningKeychain", defaultValue = "")
+	private String macSigningKeychain; //用于搜索签名标识的钥匙串的路径（绝对路径或相对于当前目录的路径）
+	
+	@Parameter(name = "macSigningKeyUserName", defaultValue = "")
+	private String macSigningKeyUserName; //Apple 签名身份名称中的团队名称部分，开发者 ID 应用程序：<团队名称>
+	
+	@Parameter(name = "macAppStore", defaultValue = "false")
+	private boolean macAppStore; //表示 jpackage 输出适用于 Mac App Store
+	
 
 	@Parameter(property = "jar", alias = "jar")
 	private JarConfiguration jarConfiguration = new JarConfiguration();
@@ -90,6 +205,8 @@ public class PackageGUIMojo extends AbstractMojo {
 
 	@Component
 	private BuildPluginManager pluginManager;
+	
+	
 	
 	/**
 	 * 
@@ -143,6 +260,124 @@ public class PackageGUIMojo extends AbstractMojo {
 			
 			if (winConsole) {
 				params.add("--win-console");
+			}
+			
+			if (winDirChooser) {
+				params.add("--win-dir-chooser");
+			}
+			if (winMenu) {
+				params.add("--win-menu");
+			}
+			
+			if (winShortcut) {
+				params.add("--win-shortcut");
+			}
+			
+			if (winShortcutPrompt) {
+				params.add("--win-shortcut-prompt");
+			}
+			
+			if (null != winHelpUrl && !"".equals(winHelpUrl)) {
+				params.add("--win-help-url");
+				params.add(winHelpUrl);
+			}
+			
+			if (null != winUpdateUrl && !"".equals(winUpdateUrl)) {
+				params.add("--win-update-url");
+				params.add(winUpdateUrl);
+			}
+			
+			if (null != linuxPackageName && !"".equals(linuxPackageName)) {
+				params.add("--linux-package-name");
+				params.add(linuxPackageName);
+			}
+			
+			if (null != linuxDebMaintainer && !"".equals(linuxDebMaintainer)) {
+				params.add("--linux-deb-maintainer");
+				params.add(linuxDebMaintainer);
+			}
+			
+			if (null != linuxMenuGroup && !"".equals(linuxMenuGroup)) {
+				params.add("--linux-menu-group");
+				params.add(linuxMenuGroup);
+			}
+			
+			if (linuxPackageDeps) {
+				params.add("--linux-package-deps");
+			}
+			
+			if (null != linuxRpmLicenseType && !"".equals(linuxRpmLicenseType)) {
+				params.add("--linux-rpm-license-type");
+				params.add(linuxRpmLicenseType);
+			}
+			
+			if (null != linuxAppRelease && !"".equals(linuxAppRelease)) {
+				params.add("--linux-app-release");
+				params.add(linuxAppRelease);
+			}
+			
+			if (null != linuxAppCategory && !"".equals(linuxAppCategory)) {
+				params.add("--linux-app-category");
+				params.add(linuxAppCategory);
+			}
+			
+			if (linuxShortcut) {
+				params.add("--linux-shortcut");
+			}
+
+			
+			if (null != macPackageIdentifier && !"".equals(macPackageIdentifier)) {
+				params.add("--mac-package-identifier");
+				params.add(macPackageIdentifier);
+			}
+			
+			if (null != macPackageName && !"".equals(macPackageName)) {
+				params.add("--mac-package-name");
+				params.add(macPackageName);
+			}
+			
+			if (null != macBundleSigningPrefix && !"".equals(macBundleSigningPrefix)) {
+				params.add("--mac-bundle-signing-prefix");
+				params.add(macBundleSigningPrefix);
+			}
+			
+			if (null != macSign && !"".equals(macSign)) {
+				params.add("--mac-sign");
+				params.add(macSign);
+			}
+			
+			if (null != macSigningKeychain && !"".equals(macSigningKeychain)) {
+				params.add("--mac-signing-keychain");
+				params.add(macSigningKeychain);
+			}
+			
+			if (null != macSigningKeyUserName && !"".equals(macSigningKeyUserName)) {
+				params.add("--mac-signing-key-user-name");
+				params.add(macSigningKeyUserName);
+			}
+			
+			if (macAppStore) {
+				params.add("--mac-app-store");
+			}
+			
+			/**
+			 * jdk > 17
+			 */
+			if (null != appContent && !"".equals(appContent)) {
+				params.add("--app-content");
+				params.add(appContent);
+			}
+			
+			if (null != installDir && !"".equals(installDir)) {
+				params.add("--install-dir");
+				params.add(installDir);
+			}
+			
+			/**
+			 * install to C:\Users\User\AppData\Local\APP\， for user
+			 */
+			if (winPerUserInstall) {
+				params.add("--win-per-user-install");
 			}
 			
 			if (null != javaOptions && !"".equals(javaOptions)) {
@@ -252,15 +487,20 @@ public class PackageGUIMojo extends AbstractMojo {
 	protected final String getAbsJpackage() throws MojoExecutionException {
 		String path =  System.getenv("JAVA_HOME");
 		
-		if (null == path || "".equals(path)) {
-			getLog().info("No JAVA_HOME found, Use IDE Jre");
-			
-			String ideJre = System.getProperty("java.home");
-			if (null == ideJre || "".equals(ideJre)) {
-				throw new MojoExecutionException("No JDK found");
+		if (null != javaHome && !"".equals(javaHome)) {
+			path = javaHome;
+		} else {
+			if (null == path || "".equals(path)) {
+				getLog().info("No JAVA_HOME found, Use IDE Jre");
+				
+				String ideJre = System.getProperty("java.home");
+				if (null == ideJre || "".equals(ideJre)) {
+					throw new MojoExecutionException("No JDK found");
+				}
+				path = ideJre;
 			}
-			path = ideJre;
-		}
+		} 
+
 		
 		StringBuilder jpkg = new StringBuilder();
 		jpkg.append(path);
@@ -273,16 +513,21 @@ public class PackageGUIMojo extends AbstractMojo {
 	}
 	
 	protected final String getAbsJdeps() throws MojoExecutionException {
+		
 		String path =  System.getenv("JAVA_HOME");
 		
-		if (null == path || "".equals(path)) {
-			getLog().info("No JAVA_HOME found, Use IDE Jre");
-			
-			String ideJre = System.getProperty("java.home");
-			if (null == ideJre || "".equals(ideJre)) {
-				throw new MojoExecutionException("No JDK found");
+		if (null != javaHome && !"".equals(javaHome)) {
+			path = javaHome;
+		} else {
+			if (null == path || "".equals(path)) {
+				getLog().info("No JAVA_HOME found, Use IDE Jre");
+				
+				String ideJre = System.getProperty("java.home");
+				if (null == ideJre || "".equals(ideJre)) {
+					throw new MojoExecutionException("No JDK found");
+				}
+				path = ideJre;
 			}
-			path = ideJre;
 		}
 		
 		StringBuilder jpkg = new StringBuilder();

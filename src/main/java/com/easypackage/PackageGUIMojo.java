@@ -30,26 +30,6 @@ import com.easypackage.executor.MojoExecutor.Element;
  * 
  * 打包 windows msi 需要 wix3.11   https://wixtoolset.org
  * 
- * #生成适合宿主系统的应用包：
-	#对于模块化应用：
-	    jpackage -n name -p modulePath -m moduleName/className
-	#对于非模块化应用程序：
-	    jpackage -i inputDir -n name  --main-class className --main-jar myJar.jar
-	#从预先构建的应用程序映像：
-	    jpackage -n name --app-image appImageDir
-	
-	#生成应用镜像：
-	#对于模块化应用：
-	    jpackage --type app-image -n name -p modulePath -m moduleName/className
-	#对于非模块化应用程序：
-	    jpackage --type app-image -i inputDir -n name --main-class className --main-jar myJar.jar
-	#要为 jlink 提供您自己的选项，请单独运行 jlink：
-	    jlink --output appRuntimeImage -p modulePath -m moduleName --no-header-files [<additional jlink options>...]
-	    jpackage --type app-image -n name -m moduleName/className --runtime-image appRuntimeImage
-	
-	#生成 Java 运行时包：
-	jpackage -n name --runtime-image <runtime-image>
- * 
  */
 @Mojo(name = "jpackage", requiresDependencyResolution = ResolutionScope.RUNTIME, defaultPhase = LifecyclePhase.PACKAGE)
 public class PackageGUIMojo extends AbstractMojo {
@@ -83,6 +63,9 @@ public class PackageGUIMojo extends AbstractMojo {
 	 */
 	@Parameter(name = "appContent", defaultValue = "")
 	private String appContent; //自定义资源的目录，英文逗号分隔，此方法只对jdk>17的有效
+	
+	@Parameter(name = "jlinkOptions", defaultValue = "")
+	private String jlinkOptions; // jlink参数
 	
 	@Parameter(name = "icon", defaultValue = "")
 	private String icon; //程序图标
@@ -166,7 +149,7 @@ public class PackageGUIMojo extends AbstractMojo {
 	@Parameter(name = "linuxAppCategory", defaultValue = "")
 	private String linuxAppCategory; //RPM <name>.spec 文件或 DEB 控制文件的节值的组值
 	
-	@Parameter(name = "linuxShortcut", defaultValue = "true")
+	@Parameter(name = "linuxShortcut", defaultValue = "false")
 	private boolean linuxShortcut; //为应用程序创建快捷方式
 //	
 	/**
@@ -258,107 +241,131 @@ public class PackageGUIMojo extends AbstractMojo {
 				params.add(modules);
 			}
 			
-			if (winConsole) {
+			//--compress=2可以使得解压后的更小，但是压缩包会变大，1解压后中等，压缩包更小，0不压缩
+			if (null != jlinkOptions && !"".equals(jlinkOptions)) {
+				params.add("--jlink-options"); 
+				params.add(jlinkOptions);
+			} else {
+				params.add("--jlink-options"); 
+				params.add("--strip-native-commands --strip-debug --no-man-pages --no-header-files --compress=1");
+			}
+			
+			
+			if (winConsole && "app-image".equals(type) || "exe".equals(type) || "msi".equals(type)) {
 				params.add("--win-console");
 			}
 			
-			if (winDirChooser) {
-				params.add("--win-dir-chooser");
+			if ("exe".equals(type)) {
+				if (winDirChooser) {
+					params.add("--win-dir-chooser");
+				}
+				
+				if (winMenu) {
+					params.add("--win-menu");
+				}
+				
+				if (winShortcut) {
+					params.add("--win-shortcut");
+				}
+				
+				if (winShortcutPrompt) {
+					params.add("--win-shortcut-prompt");
+				}
+				
+				if (null != winHelpUrl && !"".equals(winHelpUrl)) {
+					params.add("--win-help-url");
+					params.add(winHelpUrl);
+				}
+				
+				if (null != winUpdateUrl && !"".equals(winUpdateUrl)) {
+					params.add("--win-update-url");
+					params.add(winUpdateUrl);
+				}
+				
+				/**
+				 * install to C:\Users\User\AppData\Local\APP\， for user
+				 */
+				if (winPerUserInstall) {
+					params.add("--win-per-user-install");
+				}
 			}
 			
-			if (winMenu) {
-				params.add("--win-menu");
-			}
+//			if ("rpm".equals(type)) {
+//				if (null != linuxPackageName && !"".equals(linuxPackageName)) {
+//					params.add("--linux-package-name");
+//					params.add(linuxPackageName);
+//				}
+//				
+//				if (null != linuxDebMaintainer && !"".equals(linuxDebMaintainer)) {
+//					params.add("--linux-deb-maintainer");
+//					params.add(linuxDebMaintainer);
+//				}
+//				
+//				if (null != linuxMenuGroup && !"".equals(linuxMenuGroup)) {
+//					params.add("--linux-menu-group");
+//					params.add(linuxMenuGroup);
+//				}
+//				
+//				if (linuxPackageDeps) {
+//					params.add("--linux-package-deps");
+//				}
+//				
+//				if (null != linuxRpmLicenseType && !"".equals(linuxRpmLicenseType)) {
+//					params.add("--linux-rpm-license-type");
+//					params.add(linuxRpmLicenseType);
+//				}
+//				
+//				if (null != linuxAppRelease && !"".equals(linuxAppRelease)) {
+//					params.add("--linux-app-release");
+//					params.add(linuxAppRelease);
+//				}
+//				
+//				if (null != linuxAppCategory && !"".equals(linuxAppCategory)) {
+//					params.add("--linux-app-category");
+//					params.add(linuxAppCategory);
+//				}
+//				
+//				if (linuxShortcut) {
+//					params.add("--linux-shortcut");
+//				}
+//			}
 			
-			if (winShortcut) {
-				params.add("--win-shortcut");
-			}
-			
-			if (winShortcutPrompt) {
-				params.add("--win-shortcut-prompt");
-			}
-			
-			if (null != winHelpUrl && !"".equals(winHelpUrl)) {
-				params.add("--win-help-url");
-				params.add(winHelpUrl);
-			}
-			
-			if (null != winUpdateUrl && !"".equals(winUpdateUrl)) {
-				params.add("--win-update-url");
-				params.add(winUpdateUrl);
-			}
-			
-			if (null != linuxPackageName && !"".equals(linuxPackageName)) {
-				params.add("--linux-package-name");
-				params.add(linuxPackageName);
-			}
-			
-			if (null != linuxDebMaintainer && !"".equals(linuxDebMaintainer)) {
-				params.add("--linux-deb-maintainer");
-				params.add(linuxDebMaintainer);
-			}
-			
-			if (null != linuxMenuGroup && !"".equals(linuxMenuGroup)) {
-				params.add("--linux-menu-group");
-				params.add(linuxMenuGroup);
-			}
-			
-			if (linuxPackageDeps) {
-				params.add("--linux-package-deps");
-			}
-			
-			if (null != linuxRpmLicenseType && !"".equals(linuxRpmLicenseType)) {
-				params.add("--linux-rpm-license-type");
-				params.add(linuxRpmLicenseType);
-			}
-			
-			if (null != linuxAppRelease && !"".equals(linuxAppRelease)) {
-				params.add("--linux-app-release");
-				params.add(linuxAppRelease);
-			}
-			
-			if (null != linuxAppCategory && !"".equals(linuxAppCategory)) {
-				params.add("--linux-app-category");
-				params.add(linuxAppCategory);
-			}
-			
-			if (linuxShortcut) {
-				params.add("--linux-shortcut");
+			if ("dmg".equals(type)) {
+				if (null != macPackageIdentifier && !"".equals(macPackageIdentifier)) {
+					params.add("--mac-package-identifier");
+					params.add(macPackageIdentifier);
+				}
+				
+				if (null != macPackageName && !"".equals(macPackageName)) {
+					params.add("--mac-package-name");
+					params.add(macPackageName);
+				}
+				
+				if (null != macBundleSigningPrefix && !"".equals(macBundleSigningPrefix)) {
+					params.add("--mac-bundle-signing-prefix");
+					params.add(macBundleSigningPrefix);
+				}
+				
+				if (null != macSign && !"".equals(macSign)) {
+					params.add("--mac-sign");
+					params.add(macSign);
+				}
+				
+				if (null != macSigningKeychain && !"".equals(macSigningKeychain)) {
+					params.add("--mac-signing-keychain");
+					params.add(macSigningKeychain);
+				}
+				
+				if (null != macSigningKeyUserName && !"".equals(macSigningKeyUserName)) {
+					params.add("--mac-signing-key-user-name");
+					params.add(macSigningKeyUserName);
+				}
+				
+				if (macAppStore) {
+					params.add("--mac-app-store");
+				}
 			}
 
-			if (null != macPackageIdentifier && !"".equals(macPackageIdentifier)) {
-				params.add("--mac-package-identifier");
-				params.add(macPackageIdentifier);
-			}
-			
-			if (null != macPackageName && !"".equals(macPackageName)) {
-				params.add("--mac-package-name");
-				params.add(macPackageName);
-			}
-			
-			if (null != macBundleSigningPrefix && !"".equals(macBundleSigningPrefix)) {
-				params.add("--mac-bundle-signing-prefix");
-				params.add(macBundleSigningPrefix);
-			}
-			
-			if (null != macSign && !"".equals(macSign)) {
-				params.add("--mac-sign");
-				params.add(macSign);
-			}
-			
-			if (null != macSigningKeychain && !"".equals(macSigningKeychain)) {
-				params.add("--mac-signing-keychain");
-				params.add(macSigningKeychain);
-			}
-			
-			if (null != macSigningKeyUserName && !"".equals(macSigningKeyUserName)) {
-				params.add("--mac-signing-key-user-name");
-				params.add(macSigningKeyUserName);
-			}
-			
-			if (macAppStore) {
-				params.add("--mac-app-store");
-			}
 			
 			/**
 			 * jdk > 17
@@ -371,13 +378,6 @@ public class PackageGUIMojo extends AbstractMojo {
 			if (null != installDir && !"".equals(installDir)) {
 				params.add("--install-dir");
 				params.add(installDir);
-			}
-			
-			/**
-			 * install to C:\Users\User\AppData\Local\APP\， for user
-			 */
-			if (winPerUserInstall) {
-				params.add("--win-per-user-install");
 			}
 			
 			if (null != javaOptions && !"".equals(javaOptions)) {

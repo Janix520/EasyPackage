@@ -17,7 +17,7 @@
 	<plugin>
 		<groupId>io.github.janix520</groupId>
 		<artifactId>maven-easypackage-plugin</artifactId>
-		<version>1.1.0</version>
+		<version>1.2.0</version>
 		<executions>
 			<execution>
 				<phase>package</phase>

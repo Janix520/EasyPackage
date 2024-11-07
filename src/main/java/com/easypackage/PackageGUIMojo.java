@@ -27,8 +27,12 @@ import com.easypackage.executor.MojoExecutor.Element;
 
 /**
  * https://docs.oracle.com/en/java/javase/21/docs/specs/man/jpackage.html
+ * https://docs.oracle.com/en/java/javase/21/jpackage/packaging-tool-user-guide.pdf
  * 
- * 打包 windows msi 需要 wix3.11   https://wixtoolset.org
+ * 打包 windows msi 需要 wix3.11   https://wixtoolset.org		https://github.com/wixtoolset/wix3/releases/tag/wix3112rtm
+ * 打包为 service 需要service-installer.exe  https://nssm.cc/download   添加 --launcher-as-service
+ * --resource-dir 模板参考 https://github.com/openjdk/jdk/tree/master/src/jdk.jpackage/windows/classes/jdk/jpackage/internal/resources
+ * 相对路径 src/main/resources/jpackage/override  override is the resource dir
  * 
  */
 @Mojo(name = "jpackage", requiresDependencyResolution = ResolutionScope.RUNTIME, defaultPhase = LifecyclePhase.PACKAGE)
@@ -250,8 +254,8 @@ public class PackageGUIMojo extends AbstractMojo {
 				params.add("--strip-native-commands --strip-debug --no-man-pages --no-header-files --compress=1");
 			}
 			
-			
-			if (winConsole && "app-image".equals(type) || "exe".equals(type) || "msi".equals(type)) {
+			//只有windows时候有效
+			if (winConsole && ("app-image".equals(type) || "exe".equals(type) || "msi".equals(type))) {
 				params.add("--win-console");
 			}
 			
@@ -390,7 +394,7 @@ public class PackageGUIMojo extends AbstractMojo {
 				params.add(appVersion);
 			}
 			
-			if (null != appVersion && !"".equals(appVersion)) {
+			if (null != copyright && !"".equals(copyright)) {
 				params.add("--copyright");
 				params.add(copyright);
 			}

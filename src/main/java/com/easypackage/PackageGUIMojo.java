@@ -489,21 +489,20 @@ public class PackageGUIMojo extends AbstractMojo {
 //	}
 	
 	protected final String getAbsJpackage() throws MojoExecutionException {
-		String path =  System.getenv("JAVA_HOME");
+		String path = System.getProperty("java.home");
 		
 		if (null != javaHome && !"".equals(javaHome)) {
 			path = javaHome;
 		} else {
 			if (null == path || "".equals(path)) {
-				getLog().info("No JAVA_HOME found, Use IDE Jre");
 				
-				String ideJre = System.getProperty("java.home");
-				if (null == ideJre || "".equals(ideJre)) {
+				String systemPath = System.getProperty("JAVA_HOME");
+				if (null == systemPath || "".equals(systemPath)) {
 					throw new MojoExecutionException("No JDK found");
 				}
-				path = ideJre;
+				path = systemPath;
 			}
-		} 
+		}
 
 		
 		StringBuilder jpkg = new StringBuilder();
@@ -518,19 +517,18 @@ public class PackageGUIMojo extends AbstractMojo {
 	
 	protected final String getAbsJdeps() throws MojoExecutionException {
 		
-		String path =  System.getenv("JAVA_HOME");
+		String path = System.getProperty("java.home");
 		
 		if (null != javaHome && !"".equals(javaHome)) {
 			path = javaHome;
 		} else {
 			if (null == path || "".equals(path)) {
-				getLog().info("No JAVA_HOME found, Use IDE Jre");
 				
-				String ideJre = System.getProperty("java.home");
-				if (null == ideJre || "".equals(ideJre)) {
+				String systemPath = System.getProperty("JAVA_HOME");
+				if (null == systemPath || "".equals(systemPath)) {
 					throw new MojoExecutionException("No JDK found");
 				}
-				path = ideJre;
+				path = systemPath;
 			}
 		}
 		

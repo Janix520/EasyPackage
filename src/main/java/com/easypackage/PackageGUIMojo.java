@@ -639,13 +639,15 @@ public class PackageGUIMojo extends AbstractMojo {
 		
 		getLog().info("maven-dependency-plugin package success");
 	}
+	
 
 	@Override
 	public void execute() throws MojoExecutionException, MojoFailureException {
 		
 		jar();
 		
-		dependencies();
+		//issue  Local jar cannot be copied
+//		dependencies();
 		
 		run();
 	}

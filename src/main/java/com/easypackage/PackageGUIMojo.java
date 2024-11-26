@@ -2,14 +2,21 @@ package com.easypackage;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
+import org.apache.maven.artifact.Artifact;
 import org.apache.maven.execution.MavenSession;
+import org.apache.maven.model.Dependency;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.BuildPluginManager;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -100,6 +107,18 @@ public class PackageGUIMojo extends AbstractMojo {
 	
 	@Parameter(name = "minimum", defaultValue = "false")
 	private boolean minimum; //最小打包
+	
+	/**
+	 * All the dependencies including trancient dependencies
+	 */
+	@Parameter(defaultValue="${project.artifacts}")
+    private Collection<Artifact> artifacts;
+    
+	/**
+	 * All declared dependencies in this project, including system scoped dependencies
+	 */
+    @Parameter(defaultValue="${project.dependencies}")
+    private Collection<Dependency> dependencies;
 	
 	
 	/**
@@ -489,21 +508,7 @@ public class PackageGUIMojo extends AbstractMojo {
 //	}
 	
 	protected final String getAbsJpackage() throws MojoExecutionException {
-		String path = System.getProperty("java.home");
-		
-		if (null != javaHome && !"".equals(javaHome)) {
-			path = javaHome;
-		} else {
-			if (null == path || "".equals(path)) {
-				
-				String systemPath = System.getProperty("JAVA_HOME");
-				if (null == systemPath || "".equals(systemPath)) {
-					throw new MojoExecutionException("No JDK found");
-				}
-				path = systemPath;
-			}
-		}
-
+		String path = VersionUtils.getJavaHome(javaHome);
 		
 		StringBuilder jpkg = new StringBuilder();
 		jpkg.append(path);
@@ -517,20 +522,7 @@ public class PackageGUIMojo extends AbstractMojo {
 	
 	protected final String getAbsJdeps() throws MojoExecutionException {
 		
-		String path = System.getProperty("java.home");
-		
-		if (null != javaHome && !"".equals(javaHome)) {
-			path = javaHome;
-		} else {
-			if (null == path || "".equals(path)) {
-				
-				String systemPath = System.getProperty("JAVA_HOME");
-				if (null == systemPath || "".equals(systemPath)) {
-					throw new MojoExecutionException("No JDK found");
-				}
-				path = systemPath;
-			}
-		}
+		String path = VersionUtils.getJavaHome(javaHome);
 		
 		StringBuilder jpkg = new StringBuilder();
 		jpkg.append(path);
@@ -610,7 +602,7 @@ public class PackageGUIMojo extends AbstractMojo {
 				MojoExecutor.element("mainClass", this.mainClass));
 
 		Xpp3Dom configuration = MojoExecutor.configuration(MojoExecutor
-				.element(MojoExecutor.name("outputDirectory"), "${project.build.directory}/libs"),
+				.element(MojoExecutor.name("outputDirectory"), "${project.build.directory}/"+libs),
 				MojoExecutor.element(MojoExecutor.name("archive"), manifest));
 
 		this.jarConfiguration.configure(configuration);
@@ -625,29 +617,158 @@ public class PackageGUIMojo extends AbstractMojo {
 		getLog().info("maven-jar-plugin package success");
 	}
 	
-	private void dependencies() throws MojoExecutionException {
+//	private void dependencies() throws MojoExecutionException {
+//
+//		MojoExecutor.executeMojo(MojoExecutor.plugin(
+//				MojoExecutor.groupId("org.apache.maven.plugins"),
+//				MojoExecutor.artifactId("maven-dependency-plugin"),
+//				MojoExecutor.version("2.10")), MojoExecutor
+//				.goal("copy-dependencies"), MojoExecutor
+//				.configuration(MojoExecutor.element(
+//						MojoExecutor.name("outputDirectory"), "${project.build.directory}/libs")),
+//				MojoExecutor.executionEnvironment(mavenProject, mavenSession,
+//						pluginManager));
+//		
+//		getLog().info("maven-dependency-plugin package success");
+//	}
+	
+	
+	/**
+     * Returns a {@link File} object for each artifact.
+     *
+     * @param artifacts Pre-resolved artifacts
+     * @return <code>File</code> objects for each artifact.
+     */
+    private List<File> extractDependencyFiles(Collection<Artifact> artifacts) {
+        List<File> files = new ArrayList<File>();
 
-		MojoExecutor.executeMojo(MojoExecutor.plugin(
-				MojoExecutor.groupId("org.apache.maven.plugins"),
-				MojoExecutor.artifactId("maven-dependency-plugin"),
-				MojoExecutor.version("2.10")), MojoExecutor
-				.goal("copy-dependencies"), MojoExecutor
-				.configuration(MojoExecutor.element(
-						MojoExecutor.name("outputDirectory"), "${project.build.directory}/libs")),
-				MojoExecutor.executionEnvironment(mavenProject, mavenSession,
-						pluginManager));
+        if (artifacts == null){
+            return files;
+        }
+
+        for (Artifact artifact : artifacts) {
+            File file = artifact.getFile();
+
+            if (file.isFile()) {
+                files.add(file);
+            }
+
+        }
+        return files;
+    }
+
+    /**
+     * Returns a {@link File} object for each system dependency.
+     * @param systemDependencies a collection of dependencies
+     * @return <code>File</code> objects for each system dependency in the supplied dependencies.
+     */
+    private List<File> extractSystemDependencyFiles(Collection<Dependency> systemDependencies) {
+        final ArrayList<File> files = new ArrayList<File>();
+
+        if (systemDependencies == null){
+            return files;
+        }
+
+        for (Dependency systemDependency : systemDependencies) {
+            if (systemDependency != null && "system".equals(systemDependency.getScope())){
+                files.add(new File(systemDependency.getSystemPath()));
+            }
+        }
+        return files;
+    }
+    
+    /**
+     * 
+     */
+    private void dependencies() {
+    	List<File> dependencyJars = Collections.unmodifiableList(extractDependencyFiles(artifacts));
+        List<File> systemDependencyJars = Collections.unmodifiableList(extractSystemDependencyFiles(dependencies));
+        
+        File dependenciesFile = new File(workDirectory, libs);
+        for (File file : dependencyJars) {
+        	getLog().info(file.getAbsolutePath());
+        	File outJar = new File(dependenciesFile, file.getName());
+        	copyFile(file, outJar);
+		}
+        for (File file : systemDependencyJars) {
+        	getLog().info(file.getAbsolutePath());
+        	File outJar = new File(dependenciesFile, file.getName());
+        	copyFile(file, outJar);
+        }
+        
+        getLog().info("dependencies copied success");
+	}
+    
+    /**
+     * 
+     * @param in
+     * @param out
+     */
+    private void copyFile(File in, File out) {
+    	if (!in.exists()) {
+			return;
+		}
+		FileInputStream fis = null;
+		FileOutputStream fos = null;
+		boolean running = false;
+		try {
+			fis = new FileInputStream(in);
+			fos = new FileOutputStream(out);
+			running = true;
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		}
+		byte[] buffer = new byte[4096];
+		int read = 0;
 		
-		getLog().info("maven-dependency-plugin package success");
+		while (running) {
+			try {
+				read = fis.read(buffer);
+			} catch (IOException e) {
+				break;
+			}
+			if (read < 0) {
+				break;
+			}
+			try {
+				fos.write(buffer, 0, read);
+			} catch (IOException e) {
+				break;
+			}
+		}
+		
+		try {
+			fos.flush();
+			fos.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		try {
+			fis.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 	
 
 	@Override
 	public void execute() throws MojoExecutionException, MojoFailureException {
 		
+		String currentJavaHome = VersionUtils.getJavaHome(javaHome);
+		getLog().info("Used JAVA_HOME: " + currentJavaHome);
+		
+		String projectVersion = VersionUtils.getProjectVersion(currentJavaHome);
+		getLog().info("Used JDK version: " + projectVersion);
+		
+		boolean checkVersion = VersionUtils.checkVersion(projectVersion);
+		
+		if (!checkVersion) {
+			throw new MojoExecutionException("JDK version needs to be greater than or equal to 17");
+		}
+		
 		jar();
 		
-		//issue  Local jar cannot be copied
-//		dependencies();
+		dependencies();
 		
 		run();
 	}

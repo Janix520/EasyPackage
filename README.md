@@ -14,29 +14,10 @@
 
 ```xml
 
-	<!--复制这两个插件，注意顺序，解决引入本地jar打包后无法运行问题-->
-	
-	<plugin>
-		<groupId>org.apache.maven.plugins</groupId>
-		<artifactId>maven-dependency-plugin</artifactId>
-		<executions>
-			<execution>
-				<id>copy-dependencies</id>
-				<phase>package</phase>
-				<goals>
-					<goal>copy-dependencies</goal>
-				</goals>
-				<configuration>
-					<outputDirectory>${project.build.directory}/libs</outputDirectory>
-				</configuration>
-			</execution>
-		</executions>
-	</plugin>
-
 	<plugin>
 		<groupId>io.github.janix520</groupId>
 		<artifactId>maven-easypackage-plugin</artifactId>
-		<version>1.2.2</version>
+		<version>1.3.0</version>
 		<executions>
 			<execution>
 				<phase>package</phase>

@@ -41,6 +41,12 @@ import com.easypackage.executor.MojoExecutor.Element;
  * --resource-dir 模板参考 https://github.com/openjdk/jdk/tree/master/src/jdk.jpackage/windows/classes/jdk/jpackage/internal/resources
  * 相对路径 src/main/resources/jpackage/override  override is the resource dir
  * 
+ * --resource-dir override --launcher-as-service
+ * 
+ * https://docs.oracle.com/en/java/javase/21/docs/specs/man/jlink.html
+ * https://www.oracle.com/java/technologies/javase/jdk17-suported-locales.html
+ * jlink --add-modules java.base,jdk.localedata --include-locales en,ja,*-IN (other required jlink options are omitted here)
+ * 
  */
 @Mojo(name = "jpackage", requiresDependencyResolution = ResolutionScope.RUNTIME, defaultPhase = LifecyclePhase.PACKAGE)
 public class PackageGUIMojo extends AbstractMojo {
@@ -107,6 +113,12 @@ public class PackageGUIMojo extends AbstractMojo {
 	
 	@Parameter(name = "minimum", defaultValue = "false")
 	private boolean minimum; //最小打包
+	
+	@Parameter(name = "includeLocale", defaultValue = "false")
+	private boolean includeLocale; //包含语言
+	
+	@Parameter(name = "launcherAsService", defaultValue = "false")
+	private boolean launcherAsService; //是否安装为服务
 	
 	/**
 	 * All the dependencies including trancient dependencies
@@ -257,11 +269,21 @@ public class PackageGUIMojo extends AbstractMojo {
 				params.add("--add-modules");
 				String modules = getModules();
 				
-				getLog().info("Used modules: " + modules);
+				StringBuilder stringBuilder = new StringBuilder();
+				stringBuilder.append(modules);
+				//Java net SSL handshake algorithm required. jdeps bug!!!
+				stringBuilder.append(",jdk.crypto.cryptoki,jdk.crypto.ec");
+				
+				if (includeLocale) {
+					stringBuilder.append(",");
+					stringBuilder.append("jdk.localedata");
+				}
+				
+				getLog().info("Used modules: " + stringBuilder.toString());
 				if ("".equals(modules)) {
 					throw new MojoExecutionException("parse modules failed");
 				}
-				params.add(modules);
+				params.add(stringBuilder.toString());
 			}
 			
 			//--compress=2可以使得解压后的更小，但是压缩包会变大，1解压后中等，压缩包更小，0不压缩
@@ -308,7 +330,7 @@ public class PackageGUIMojo extends AbstractMojo {
 				/**
 				 * install to C:\Users\User\AppData\Local\APP\， for user
 				 */
-				if (winPerUserInstall) {
+				if (winPerUserInstall && !launcherAsService) {
 					params.add("--win-per-user-install");
 				}
 			}
@@ -426,6 +448,20 @@ public class PackageGUIMojo extends AbstractMojo {
 			if (null != description && !"".equals(description)) {
 				params.add("--description");
 				params.add(description);
+			}
+			
+			//是否安装为服务，目前只测试了windows
+			if (launcherAsService) {
+				if ("exe".equals(type) || "msi".equals(type)) {
+					
+					copyServiceInstaller();
+					
+					params.add("--resource-dir");
+					params.add("override");
+					params.add("--launcher-as-service");
+				} else {
+					throw new MojoExecutionException("launcherAsService only supports Windows, with types of exe and msi");
+				}
 			}
 			
 			params.add("--verbose");
@@ -571,7 +607,7 @@ public class PackageGUIMojo extends AbstractMojo {
 		try {
 			start = processBuilder.start();
 			InputStream inputStream = start.getInputStream();
-			BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, Charset.forName("GBK")));
+			BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream, Charset.defaultCharset()));
 			
 			while (true) {
 				String line = bufferedReader.readLine();
@@ -749,6 +785,60 @@ public class PackageGUIMojo extends AbstractMojo {
 			e.printStackTrace();
 		}
 	}
+    
+    private void copyFile(InputStream in, File out) {
+		FileOutputStream fos = null;
+		boolean running = false;
+		try {
+			fos = new FileOutputStream(out);
+			running = true;
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		}
+		byte[] buffer = new byte[4096];
+		int read = 0;
+		
+		while (running) {
+			try {
+				read = in.read(buffer);
+			} catch (IOException e) {
+				break;
+			}
+			if (read < 0) {
+				break;
+			}
+			try {
+				fos.write(buffer, 0, read);
+			} catch (IOException e) {
+				break;
+			}
+		}
+		
+		try {
+			fos.flush();
+			fos.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		try {
+			in.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+    
+    /**
+     * 
+     */
+    private void copyServiceInstaller() {
+    	InputStream inputStream = PackageGUIMojo.class.getResourceAsStream("service-installer.exe");
+    	File override = new File(workDirectory, "override");
+    	if (!override.exists()) {
+    		override.mkdirs();
+		}
+    	File file = new File(override, "service-installer.exe");
+    	copyFile(inputStream, file);
+	}
 	
 
 	@Override
@@ -771,6 +861,7 @@ public class PackageGUIMojo extends AbstractMojo {
 		dependencies();
 		
 		run();
+	
 	}
 
 }

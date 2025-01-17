@@ -9,6 +9,7 @@
  - 最小打包
  - 支持模块化和非模块化
  - 支持Springboot项目
+ - 支持一键打包为windows服务
 
 ### Add plugins in Maven
 
@@ -17,7 +18,7 @@
 	<plugin>
 		<groupId>io.github.janix520</groupId>
 		<artifactId>maven-easypackage-plugin</artifactId>
-		<version>1.3.0</version>
+		<version>1.4.0</version>
 		<executions>
 			<execution>
 				<phase>package</phase>
@@ -81,6 +82,8 @@ mvn clean package
 | jarName | 如果您改了带有主方法的jar名称，那需要您指定名称 | false |
 | workDirectory | 如果您改了编译目录，那workDirectory下一定要有libs | false |
 | libs | 编译后的所有jar的目录 | false |
+| includeLocale | 最小打包是否包含其他语言 | false |
+| launcherAsService | 是否打包为windows服务 | false |
 
 ### Open source
 https://github.com/Janix520/EasyPackage
